@@ -1,0 +1,65 @@
+プログラミングや学習を中心とした作業により度々自分のラップトップにあるRomが圧迫される課題が発生。
+開発環境の構築を目的としたDebianベースのインスタンスを作成してここで作成したファイルやフォルダをここで管理する。
+達成目標としてJetBrainsの製品がDebianを持つインスタンス内で動作し、ChromeRemoteDesktopで自分のラップトップから
+可用性に富んだアクセスを実現できることとする。
+
+"CloudShell"
+gcloud compute instances create main-debian-d \
+    --project=vm-instance-workspace \
+    --zone=asia-northeast1-c \
+    --machine-type=n2-highmem-2 \
+    --network-interface=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=default \
+    --maintenance-policy=MIGRATE \
+    --provisioning-model=STANDARD \
+    --no-service-account \
+    --no-scopes \
+    --create-disk=auto-delete=yes, \
+                         boot=yes, \
+                  device-name=main-debian-d, \
+                        image=projects/debian-cloud/global/images/debian-12-bookworm-v20230711, \
+                         mode=rw, \
+                         size=15, \
+                         type=projects/vm-instance-workspace/zones/asia-northeast1-b/diskTypes/pd-ssd \
+    --no-shielded-secure-boot \
+    --shielded-vtpm \
+    --shielded-integrity-monitoring \
+    --labels=goog-ec-src=vm_add-gcloud \
+    --reservation-affinity=any
+    
+/*インスタンスが完成したらSSHで接続。
+  以降はDebianにてコマンドラインベースで作業。*/
+  
+/ヘッドレスのdebianにXfceをインストールしてデスクトップ環境を構築
+/1,xfce4 desktop-base dbus-x11 xscreensaverこれらの複数のアプリケーションを承諾前提で対話せずインストールする
+$ sudo DEBIAN_FRONTEND=noninteractive \
+  apt install --assume-yes xfce4 desktop-base dbus-x11 xscreensaver
+/2,リモートデスクトップを実行した際にXfceに基づいてセッションする  
+$ sudo bash -c 'echo "exec /etc/X11/Xsession /usr/bin/xfce4-session" > /etc/chrome-remote-desktop-session'
+/3,URLからインストールパッケージをダウンロード
+$ curl -L -o google-chrome-stable_current_amd64.deb \
+  https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+
+/Chromeをインストール
+$ sudo apt install --assume-yes ./google-chrome-stable_current_amd64.deb
+
+/ChromeRemoteDesktopをダウンロードしてホストの構成と起動、
+(基本としてChromeが提供するリモートデスクトップクライアントの指示に従って設定して行くことをおすすめする。)
+ここよりヘッドレス向けのセットアップができる。https://remotedesktop.google.com/headless
+
+/1,ホスト用のリモートデスクトップをダウンロードする。
+$ wget https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
+$ sudo apt install --assime-yes chrome-remote-desktop_urrent_amd64.deb
+/2,リモートデスクトップを起動する。
+$ DISPLAY= /opt/google/chrome-remote-desktop/start-host \ サービスの起動
+    --code="4/xxxxxxxxxxxxxxxxxxxxxxxx" \　アカウントに基づいてホストを認証
+    --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \　認証されたクライアント側がリモートを開始するためのリダイレクトを提示する
+    --name=$(hostname)　クライアントが参照した際に表示するホスト名
+
+ホスト側の設定が完了。クライアント側にこのホスト名が表示されていれば成功。
+
+/*JetBrains Toolboxも導入することができて満足の行く結果になった。
+優先順位が低いが次回以降としては日本語フォントを導入し、日本語入力に対応させる*/
+
+/*参考
+Cloud アーキテクチャ センター. "Compute Engine での Linux 向け Chrome リモート デスクトップのセットアップ". GoogleCloud. 2022-11-16_UTC.
+https://cloud.google.com/architecture/chrome-desktop-remote-on-compute-engine?hl=ja#xfce. 2023-07-22_JST
